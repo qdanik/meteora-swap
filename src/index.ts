@@ -16,7 +16,7 @@ const start = async () => {
       if (!hasRequiredFields(parsedMessage)) {
         throw new Error(`❌ Missing required fields in incoming message`);
       }
-      const buyYForX = parsedMessage.contractAddress === parsedMessage.caX;
+      const buyYForX = parsedMessage.contractAddress === parsedMessage.caY;
 
       const {
         txHash,
@@ -29,8 +29,9 @@ const start = async () => {
         parsedMessage.nameY,
         parsedMessage.caX,
         parsedMessage.caY,
-        undefined, // default amount will be handled by the swap function
-        buyYForX,
+        parsedMessage?.amount ?? undefined, // default amount will be handled by the swap function
+        parsedMessage.buyYForX ?? buyYForX,
+        parsedMessage?.slippage ?? undefined
       );
       mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, {
         text: `✅ Successfully Swapped ${inAmount} ${inName.toUpperCase()} to ${outName.toUpperCase()}.\n Transaction Hash: ${txHash}`,
@@ -49,7 +50,7 @@ const start = async () => {
   // Send a test message to the queue to SWAP USDC to SOL
   // await mqConnection.sendToQueue(RMQ_TX_QUEUE, {
   //   poolAddress: '7zwc5JuKuyhgc1VELA59KGAY2xmd3HZGwJNLCfHXZP99',
-  //   contractAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  //   contractAddress: 'So11111111111111111111111111111111111111112',
   //   nameX: 'USDC',
   //   nameY: 'SOL',
   //   caX: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
