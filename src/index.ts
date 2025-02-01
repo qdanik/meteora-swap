@@ -14,16 +14,11 @@ const start = async () => {
       console.log(`📬 Received Notification: `, parsedMessage);
 
       if (!hasRequiredFields(parsedMessage)) {
-        throw new Error(`❌ Missing required fields in incoming message`);
+        throw new Error(`❌ Отсутствуют обязательные поля во входящем cообщении`);
       }
       const buyYForX = parsedMessage.contractAddress === parsedMessage.caY;
 
-      const {
-        txHash,
-        inAmount,
-        inName,
-        outName,
-      } = await meteora.swap(
+      await meteora.swap(
         parsedMessage.poolAddress,
         parsedMessage.nameX,
         parsedMessage.nameY,
@@ -33,14 +28,11 @@ const start = async () => {
         parsedMessage.buyYForX ?? buyYForX,
         parsedMessage?.slippage ?? undefined
       );
-      mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, {
-        text: `✅ Successfully Swapped ${inAmount} ${inName.toUpperCase()} to ${outName.toUpperCase()}.\n Transaction Hash: ${txHash}`,
-      });
     } catch (error) {
       console.error(`❌ Could not handle incoming notification: ${error.message}`);
 
       mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, {
-        text: `❌ Could not handle transaction: ${msg}`,
+        text: `❌ Ошибка при обработке входящего уведомления: ${error.message}`,
       });
     }
   };

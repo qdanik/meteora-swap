@@ -35,7 +35,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
     try {
       return dlmmPool.swapQuote(inAmount, swapForY, allowedSlippage, swapBinArrays);
     } catch (error) {
-      throw new Error(`[SWAP.quote] ${error.message}`);
+      throw new Error(`❌ Не удалось получить котировку свапа: ${error.message}`);
     }
   };
 
@@ -56,7 +56,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
         uiAmountString: string;
       };
     } catch (error) {
-      throw new Error(`❌ Could not get token balance: ${error.message}`);
+      throw new Error(`❌ Не удалось получить баланс токена: ${error.message}`);
     }
   };
 
@@ -69,7 +69,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
       return DEFAULT_SOL_AMOUNT;
     }
 
-    throw new Error(`❌ Could not get default amount for ${inContract}`);
+    throw new Error(`❌ Не удалось получить количество токенов по умолчанию для <code>${inContract}</code>`);
   };
 
   const getTokenAmount = async (inContract: string, amount?: number) => {
@@ -89,7 +89,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
         tokenAmount: defaultAmount * 10 ** decimals,
       };
     } catch (error) {
-      throw new Error(`❌ Could not get token amount: ${error.message}`);
+      throw new Error(`❌ Не удалось получить количество токенов: ${error.message}`);
     }
   };
 
@@ -134,12 +134,12 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
     const dlmmSwap = await dlmmPool.swap(swapParams);
 
     try {
-      logger(`⌛️ Swapping ${defaultAmount} ${inName.toUpperCase()} to ${outName.toUpperCase()}`);
+      logger(`⌛️ Начинаю свап <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>`);
       const swapTxHash = await sendAndConfirmTransaction(connection, dlmmSwap, [user], {
         commitment: 'confirmed',
         maxRetries: MAX_RETRY,
       });
-      logger(`✅ Successfully Swapped ${defaultAmount} ${inName.toUpperCase()} to ${outName.toUpperCase()}.\n Transaction Hash: ${swapTxHash}`);
+      logger(`✅ Успешный свап <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>.\nTx Хэш: <code>${swapTxHash}</code>`);
 
       return {
         txHash: swapTxHash,
@@ -148,7 +148,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
         outName,
       };
     } catch (error) {
-      logger(`❌ Could not swap ${defaultAmount} ${inName.toUpperCase()} to ${outName.toUpperCase()}: ${error.message}`);
+      logger(`❌ Не удалось свапнуть <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>: ${error.message}`);
       return {
         txHash: error?.signature,
         inAmount: defaultAmount,
