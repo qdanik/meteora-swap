@@ -3,7 +3,7 @@ import { RMQ_HOST, RMQ_PASS, RMQ_PORT, RMQ_TX_QUEUE, RMQ_USER } from './config';
 
 type HandlerCB = (msg: string) => any;
 
-class RabbitMQConnection {
+export class RabbitMQConnection {
   connection!: Connection;
   channel!: Channel;
   private connected!: Boolean;
