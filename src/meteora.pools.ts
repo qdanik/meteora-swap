@@ -59,6 +59,8 @@ const buyToken = async (address: string) => {
 
   console.log(`🔍 Found pool: ${params.poolAddress}`);
   const buyYForX = params.caY === address;
+  const nameX = buyYForX ? params.nameX : params.nameY;
+  const nameY = buyYForX ? params.nameY : params.nameX;
 
   try {
     await meteora.swap(
@@ -70,15 +72,15 @@ const buyToken = async (address: string) => {
       undefined,
       buyYForX
     );
-    console.log(`✅ Bought ${buyYForX ? params.nameX : params.nameY} to ${buyYForX ? params.nameY : params.nameX}`);
+    console.log(`✅ Bought ${nameX} to ${nameY}`);
   } catch {
-    console.log(`❌ Could not buy ${buyYForX ? params.nameX : params.nameY} to ${buyYForX ? params.nameY : params.nameX}`);
+    console.log(`❌ Could not buy ${nameX} to ${nameY}`);
   }
   console.timeEnd('swapByPool');
   console.timeEnd('buy');
 };
 
-const sellToken = async (address: string) => {
+const sellToken = async (address: string, defaultAmount?: number) => {
   console.time('sell');
   const meteora = createMeteora();
   const params = await findPools(address);
@@ -86,6 +88,8 @@ const sellToken = async (address: string) => {
   console.log(`🔍 Found pool: ${params.poolAddress}`);
   const { uiAmount: amount } = await meteora.getBalanceByToken(address);
   const buyYForX = params.caX === address;
+  const nameX = buyYForX ? params.nameX : params.nameY;
+  const nameY = buyYForX ? params.nameY : params.nameX;
 
   try {
     await meteora.swap(
@@ -94,12 +98,12 @@ const sellToken = async (address: string) => {
       params.nameY,
       params.caX,
       params.caY,
-      0.05,
+      defaultAmount ?? amount,
       buyYForX
     );
-    console.log(`✅ Sold ${amount} ${buyYForX ? params.nameX : params.nameY} to ${buyYForX ? params.nameY : params.nameX}`);
+    console.log(`✅ Sold ${amount} ${nameX} to ${nameY}`);
   } catch {
-    console.log(`❌ Could not sell ${amount} ${buyYForX ? params.nameX : params.nameY} to ${buyYForX ? params.nameX : params.nameY}`);
+    console.log(`❌ Could not sell ${amount} ${nameX} to ${nameY}`);
   }
   console.timeEnd('swapByPool');
   console.timeEnd('sell');
@@ -110,6 +114,7 @@ const start = async () => {
   // await buyToken('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
   // await getTokenBalance('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
   // await sellToken('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
+  // await sellToken('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 5);
 };
 
 start().catch(console.error);

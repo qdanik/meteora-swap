@@ -11,7 +11,7 @@ export const DEFAULT_SLIPPAGE = Number(process.env.DEFAULT_SLIPPAGE);
 export const MAX_RETRY = Number(process.env.MAX_RETRY);
 
 export const RMQ_HOST = process.env.RMQ_HOST;
-export const RMQ_PORT = process.env.RMQ_PORT;
+export const RMQ_PORT = Number(process.env.RMQ_PORT);
 export const RMQ_USER = process.env.RMQ_USER;
 export const RMQ_PASS = process.env.RMQ_PASS;
 export const RMQ_TX_QUEUE = process.env.RMQ_TX_QUEUE;

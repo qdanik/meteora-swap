@@ -1,5 +1,3 @@
-export type Currency = 'usdc' | 'sol' | string;
-
 export type IncomingTransaction = {
   poolAddress: string,
   contractAddress: string,
@@ -10,6 +8,7 @@ export type IncomingTransaction = {
   amount?: number,
   buyYForX?: boolean, // Buy token Y to X when it is true, else reversed
   slippage?: number;
+  priorityFee?: number;
 };
 
 export interface MeteoraPairsResponse {

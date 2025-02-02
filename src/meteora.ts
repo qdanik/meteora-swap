@@ -1,6 +1,6 @@
 import { BN } from '@coral-xyz/anchor';
 import DLMM, { BinArrayAccount, type SwapParams } from '@meteora-ag/dlmm';
-import { Connection, Keypair, PublicKey, sendAndConfirmTransaction } from '@solana/web3.js';
+import { ComputeBudgetProgram, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, SendTransactionError, SystemProgram, Transaction } from '@solana/web3.js';
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
 import { SOL_PRIVATE_KEY, SOL_RPC_URL, DEFAULT_SLIPPAGE, DEFAULT_CA, DEFAULT_USDC_AMOUNT, DEFAULT_SOL_AMOUNT, MAX_RETRY, RMQ_NOTIFY_QUEUE } from './config';
 import { RabbitMQConnection } from './rabbit';
@@ -102,9 +102,9 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
     amount?: number,
     buyYForX: boolean = true, // Buy token Y to X when it is true, else reversed
     slippage: number = DEFAULT_SLIPPAGE * 100,
+    priorityFee?: number,
   ) => {
     const dlmmPool = await DLMM.create(connection, new PublicKey(poolAddress));
-    const minOutAmount = new BN(0);
 
     const inName = buyYForX ? nameX : nameY;
     const inContract = buyYForX ? caX : caY;
@@ -125,21 +125,43 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
       inAmount,
       inToken,
       outToken,
-      minOutAmount,
-      lbPair: dlmmPool.pubkey,
       user: user.publicKey,
+      lbPair: dlmmPool.pubkey,
+      minOutAmount: swapQuote.minOutAmount,
       binArraysPubkey: swapQuote.binArraysPubkey,
     };
 
+    // Create a transaction with the priority fee and the swap instructions
+    const transaction = new Transaction();
+    // Add priority fee to the beginning of the instructions array
+    if (priorityFee) {
+      const priorityFeeLamports = priorityFee * LAMPORTS_PER_SOL;
+      const addPriorityFee = ComputeBudgetProgram.setComputeUnitPrice({
+        microLamports: priorityFeeLamports,
+      });
+      transaction.add(addPriorityFee);
+    }
+    // Swap the tokens
     const dlmmSwap = await dlmmPool.swap(swapParams);
+    transaction.add(dlmmSwap);
+    // Bribery Fee for the transaction
+    // const bribe = 0.001 * LAMPORTS_PER_SOL;
+    // TODO?: Find a way to get the bribe account
+    // const bribeAccount = new PublicKey('');
+    // const bribeInstruction = SystemProgram.transfer({
+    //   fromPubkey: user.publicKey,
+    //   toPubkey: bribeAccount,
+    //   lamports: bribe,
+    // });
+    // transaction.add(bribeInstruction);
 
     try {
-      logger(`⌛️ Начинаю свап <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>`);
-      const swapTxHash = await sendAndConfirmTransaction(connection, dlmmSwap, [user], {
+      logger(`☄️ | ⌛️ Начинаю свап <b>${defaultAmount} ${inName.toUpperCase()} </b> в <b>${outName.toUpperCase()}</b>`);
+      const swapTxHash = await sendAndConfirmTransaction(connection, transaction, [user], {
         commitment: 'confirmed',
         maxRetries: MAX_RETRY,
       });
-      logger(`✅ Успешный свап <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>.\nTx Хэш: <code>${swapTxHash}</code>`);
+      logger(`☄️ | ✅ Успешный свап <b> ${defaultAmount} ${inName.toUpperCase()} </b> в <b>${outName.toUpperCase()}</b>.\nTx Хэш: <code>${swapTxHash}</code>`);
 
       return {
         txHash: swapTxHash,
@@ -148,7 +170,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
         outName,
       };
     } catch (error) {
-      logger(`❌ Не удалось свапнуть <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>: ${error.message}`);
+      logger(`☄️ | ❌ Не удалось свапнуть <b>${defaultAmount} ${inName.toUpperCase()}</b> в <b>${outName.toUpperCase()}</b>.${error?.signature ? `\nTx Хэш: <code>${error?.signature}</code>.` : ''}\nОшибка: ${error.message}.`);
       return {
         txHash: error?.signature,
         inAmount: defaultAmount,

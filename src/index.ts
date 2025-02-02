@@ -11,10 +11,10 @@ const start = async () => {
   const handleIncomingNotification = async (msg: string) => {
     try {
       const parsedMessage = JSON.parse(msg) as IncomingTransaction;
-      console.log(`📬 Received Notification: `, parsedMessage);
+      console.log(`☄️ | 📬 Received Notification: `, parsedMessage);
 
       if (!hasRequiredFields(parsedMessage)) {
-        throw new Error(`❌ Отсутствуют обязательные поля во входящем cообщении`);
+        throw new Error(`☄️ | ❌ Отсутствуют обязательные поля во входящем cообщении`);
       }
       const buyYForX = parsedMessage.contractAddress === parsedMessage.caY;
 
@@ -26,13 +26,14 @@ const start = async () => {
         parsedMessage.caY,
         parsedMessage?.amount ?? undefined, // default amount will be handled by the swap function
         parsedMessage.buyYForX ?? buyYForX,
-        parsedMessage?.slippage ?? undefined
+        parsedMessage?.slippage ?? undefined,
+        parsedMessage?.priorityFee ?? undefined
       );
     } catch (error) {
-      console.error(`❌ Could not handle incoming notification: ${error.message}`);
+      console.error(`☄️ | ❌ Could not handle incoming notification: ${error.message}`);
 
       mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, {
-        text: `❌ Ошибка при обработке входящего уведомления: ${error.message}`,
+        text: `☄️ | ❌ Ошибка при обработке входящего уведомления: ${error.message}`,
       });
     }
   };
@@ -47,6 +48,7 @@ const start = async () => {
   //   nameY: 'SOL',
   //   caX: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   //   caY: 'So11111111111111111111111111111111111111112',
+  //   amount: 5,
   // });
 
   // await mqConnection.consume(console.log, RMQ_NOTIFY_QUEUE);
@@ -56,7 +58,7 @@ const start = async () => {
   //   });
   // }, 15000);
 
-  console.log(`🚀 Meteora is ready to swap`);
+  console.log(`☄️ | 🚀 Meteora is ready to swap`);
 };
 
 start();

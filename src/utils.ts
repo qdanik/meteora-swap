@@ -1,8 +1,4 @@
-import { Currency, IncomingTransaction } from './types';
-
-export const isCorrectCurrency = (currency: string): currency is Currency => {
-  return currency === 'usdc' || currency === 'sol';
-};
+import { IncomingTransaction } from './types';
 
 export const hasRequiredFields = (message: IncomingTransaction): message is IncomingTransaction => {
   return (
