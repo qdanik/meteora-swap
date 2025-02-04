@@ -70,7 +70,9 @@ const buyToken = async (address: string) => {
       params.caX,
       params.caY,
       undefined,
-      buyYForX
+      buyYForX,
+      500,
+      0.001
     );
     console.log(`✅ Bought ${nameX} to ${nameY}`);
   } catch {
@@ -99,7 +101,9 @@ const sellToken = async (address: string, defaultAmount?: number) => {
       params.caX,
       params.caY,
       defaultAmount ?? amount,
-      buyYForX
+      buyYForX,
+      500,
+      0.001
     );
     console.log(`✅ Sold ${amount} ${nameX} to ${nameY}`);
   } catch {

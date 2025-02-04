@@ -2,7 +2,7 @@ import { BN } from '@coral-xyz/anchor';
 import DLMM, { BinArrayAccount, type SwapParams } from '@meteora-ag/dlmm';
 import { ComputeBudgetProgram, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, SendTransactionError, SystemProgram, Transaction } from '@solana/web3.js';
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
-import { SOL_PRIVATE_KEY, SOL_RPC_URL, DEFAULT_SLIPPAGE, DEFAULT_CA, DEFAULT_USDC_AMOUNT, DEFAULT_SOL_AMOUNT, MAX_RETRY, RMQ_NOTIFY_QUEUE } from './config';
+import { SOL_PRIVATE_KEY, SOL_RPC_URL, DEFAULT_SLIPPAGE, DEFAULT_CA, DEFAULT_USDC_AMOUNT, DEFAULT_SOL_AMOUNT, MAX_RETRY, RMQ_NOTIFY_QUEUE, DEFAULT_PRIORITY_FEE } from './config';
 import { RabbitMQConnection } from './rabbit';
 
 export const createMeteora = (mqConnection?: RabbitMQConnection) => {
@@ -102,7 +102,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
     amount?: number,
     buyYForX: boolean = true, // Buy token Y to X when it is true, else reversed
     slippage: number = DEFAULT_SLIPPAGE * 100,
-    priorityFee?: number,
+    priorityFee: number = DEFAULT_PRIORITY_FEE ?? 0.001,
   ) => {
     const dlmmPool = await DLMM.create(connection, new PublicKey(poolAddress));
 
@@ -159,7 +159,7 @@ export const createMeteora = (mqConnection?: RabbitMQConnection) => {
       logger(`☄️ | ⌛️ Начинаю свап <b>${defaultAmount} ${inName.toUpperCase()} </b> в <b>${outName.toUpperCase()}</b>`);
       const swapTxHash = await sendAndConfirmTransaction(connection, transaction, [user], {
         commitment: 'confirmed',
-        maxRetries: MAX_RETRY,
+        maxRetries: MAX_RETRY ?? 3,
       });
       logger(`☄️ | ✅ Успешный свап <b> ${defaultAmount} ${inName.toUpperCase()} </b> в <b>${outName.toUpperCase()}</b>.\nTx Хэш: <code>${swapTxHash}</code>`);
 

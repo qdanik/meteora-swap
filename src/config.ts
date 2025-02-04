@@ -8,6 +8,7 @@ export const SOL_RPC_URL = process.env.SOL_RPC_URL;
 export const DEFAULT_USDC_AMOUNT = Number(process.env.DEFAULT_USDC_AMOUNT);
 export const DEFAULT_SOL_AMOUNT = Number(process.env.DEFAULT_SOL_AMOUNT);
 export const DEFAULT_SLIPPAGE = Number(process.env.DEFAULT_SLIPPAGE);
+export const DEFAULT_PRIORITY_FEE = Number(process.env.DEFAULT_PRIORITY_FEE);
 export const MAX_RETRY = Number(process.env.MAX_RETRY);
 
 export const RMQ_HOST = process.env.RMQ_HOST;
