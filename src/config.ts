@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const SOL_PRIVATE_KEY = process.env.SOL_PRIVATE_KEY;
+export const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY;
 export const SOL_RPC_URL = process.env.SOL_RPC_URL;
 
 export const DEFAULT_USDC_AMOUNT = Number(process.env.DEFAULT_USDC_AMOUNT);
