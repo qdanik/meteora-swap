@@ -1,5 +1,5 @@
-import { API_URL, DEFAULT_CA } from './config';
-import { MeteoraPairsResponse } from './types';
+import { API_URL, DEFAULT_CA } from '../config';
+import { MeteoraPairsResponse } from '../types';
 import { createMeteora } from './meteora';
 
 const DEFAULT_ADDRESSES = [DEFAULT_CA.SOL, DEFAULT_CA.USDC];

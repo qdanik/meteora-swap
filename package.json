@@ -4,8 +4,8 @@
   "main": "src/index.ts",
   "scripts": {
     "dev": "ts-node src/index.ts",
-    "dev:example": "ts-node src/meteora.example.ts",
-    "dev:pool": "ts-node src/meteora.pools.ts",
+    "dev:meteora": "ts-node src/meteora/meteora.example.ts",
+    "dev:pancake": "ts-node src/pancake/pancake.example.ts",
     "start": "nodemon dist/index.js localhost 8000",
     "build": "tsc"
   },
@@ -19,6 +19,7 @@
     "@solana/web3.js": "^1.98.0",
     "amqplib": "^0.10.5",
     "dotenv": "^16.4.7",
+    "ethers": "^6.13.5",
     "typescript": "^5.7.3"
   },
   "devDependencies": {
