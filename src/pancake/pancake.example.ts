@@ -11,10 +11,10 @@ async function main() {
   console.log("BNB/TST Pancake Pair", balance.toString());
   const reserves = await pancake.getReserves(balance);
   console.log("Reserves", reserves);
-  const swap = await pancake.swapBNBForTokens(TST, "0.002", "1");
-  console.log("Swap", swap);
-  const swap2 = await pancake.swapTokensForBNB(TST, "52", "1");
-  console.log("Swap2", swap2);
+  // const swap = await pancake.swapBNBForTokens(TST, "0.002", "1");
+  // console.log("Swap", swap);
+  // const swap2 = await pancake.swapTokensForBNB(TST, "52", "1");
+  // console.log("Swap2", swap2);
 }
 
 main().catch((err) => console.error(err));

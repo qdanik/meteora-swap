@@ -8,6 +8,9 @@ export const SOL_RPC_URL = process.env.SOL_RPC_URL;
 export const BSC_PRIVATE_KEY = process.env.BSC_PRIVATE_KEY;
 export const BSC_RPC_URL = process.env.BSC_RPC_URL;
 
+export const ETH_PRIVATE_KEY = process.env.ETH_PRIVATE_KEY;
+export const ETH_RPC_URL = process.env.ETH_RPC_URL;
+
 export const DEFAULT_USDC_AMOUNT = Number(process.env.DEFAULT_USDC_AMOUNT);
 export const DEFAULT_SOL_AMOUNT = Number(process.env.DEFAULT_SOL_AMOUNT);
 export const DEFAULT_SLIPPAGE = Number(process.env.DEFAULT_SLIPPAGE);

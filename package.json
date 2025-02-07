@@ -6,6 +6,7 @@
     "dev": "ts-node src/index.ts",
     "dev:meteora": "ts-node src/meteora/meteora.example.ts",
     "dev:pancake": "ts-node src/pancake/pancake.example.ts",
+    "dev:uniswap": "ts-node src/uniswap/uniswap.example.ts",
     "start": "nodemon dist/index.js localhost 8000",
     "build": "tsc"
   },

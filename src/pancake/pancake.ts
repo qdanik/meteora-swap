@@ -25,6 +25,7 @@ const routerAbi = [
 
 // ERC20 ABI (для balanceOf, allowance, approve)
 const erc20Abi = [
+  'function decimals() view returns (uint8)',
   'function balanceOf(address owner) view returns (uint256)',
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) external returns (bool)'
@@ -37,6 +38,25 @@ export const createPanCake = () => {
 
   const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
   const wallet = new ethers.Wallet(BSC_PRIVATE_KEY, provider);
+
+  async function getTokenDecimals(tokenAddress: string) {
+    const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, provider);
+    const decimals: number = await tokenContract.decimals();
+
+    return decimals;
+  }
+
+  const formatToken = async (token: string, amount: string) => {
+    const decimals = await getTokenDecimals(token);
+
+    return formatUnits(amount, decimals);
+  };
+
+  const parseToken = async (token: string, amount: string) => {
+    const decimals = await getTokenDecimals(token);
+
+    return parseUnits(amount, decimals);
+  };
 
   const getPair = async (tokenA: string, tokenB: string) => {
     const factory = new ethers.Contract(BSC_FACTORY_ADDRESS, getPairAbi, wallet);
@@ -55,8 +75,8 @@ export const createPanCake = () => {
     const token1 = await pairContract.token1();
 
     return {
-      [token0]: formatUnits(reserves[0], 18),
-      [token1]: formatUnits(reserves[1], 18),
+      [token0]: await formatToken(token0, reserves[0]),
+      [token1]: await formatToken(token1, reserves[1]),
     };
   };
 
@@ -64,7 +84,7 @@ export const createPanCake = () => {
     const tokenContract = new ethers.Contract(token, erc20Abi, wallet);
     const balance = await tokenContract.balanceOf(wallet.address);
 
-    return formatUnits(balance, 18);
+    return await formatToken(token, balance);
   };
 
   const swapBNBForTokens = async (
@@ -110,7 +130,7 @@ export const createPanCake = () => {
     priorityFee: string
   ) => {
     const router = new ethers.Contract(BSC_ROUTER_ADDRESS, routerAbi, wallet);
-    const amountIn = parseUnits(tokenAmount, 18);
+    const amountIn = await parseToken(tokenA, tokenAmount);
     const balanceA = await getTokenBalance(tokenA);
 
     if (parseFloat(balanceA) < parseFloat(tokenAmount)) {
