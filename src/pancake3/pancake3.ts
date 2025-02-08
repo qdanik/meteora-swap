@@ -1,22 +1,17 @@
 import { ethers, parseEther, parseUnits, formatUnits } from "ethers";
-import { BSC_PRIVATE_KEY, BSC_RPC_URL, DEFAULT_SLIPPAGE } from "../config";
+import { DEFAULT_SLIPPAGE } from "../config";
 import { Pool, Route, Trade, TICK_SPACINGS, nearestUsableTick, TickListDataProvider, FeeAmount } from "@uniswap/v3-sdk";
 import {
   Token,
   CurrencyAmount,
   Percent,
   TradeType,
-  ChainId,
 } from "@uniswap/sdk-core";
 import JSBI from 'jsbi';
-
-const PANCAKE_V3_FACTORY = "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865";
-const PANCAKE_V3_ROUTER = "0x1b81D678ffb9C0263b24A97847620C99d213eB14";
-const WBNB_ADDRESS = "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c";
+import { NetworkConfig } from './pancake3.constants';
 
 // fee-tier 0.3% (3000) для одного пула
 const DEFAULT_FEE_TIER = 3000;
-export const WETH_ADDRESS = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 
 // ===================== ABIs =====================
 const factoryAbi = [
@@ -46,13 +41,13 @@ const erc20Abi = [
   "function deposit() public payable",
 ];
 
-export const createPanCakeV3 = () => {
-  if (!BSC_PRIVATE_KEY) {
+export const createPanCakeV3 = (network: NetworkConfig) => {
+  if (!network.privateKey) {
     throw new Error("BSC_PRIVATE_KEY is required");
   }
 
-  const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
-  const wallet = new ethers.Wallet(BSC_PRIVATE_KEY, provider);
+  const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+  const wallet = new ethers.Wallet(network.privateKey, provider);
 
   async function getTokenDecimals(tokenAddress: string) {
     const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, provider);
@@ -70,7 +65,7 @@ export const createPanCakeV3 = () => {
   }
 
   const getPair = async (token0: string, token1: string) => {
-    const factory = new ethers.Contract(PANCAKE_V3_FACTORY, factoryAbi, wallet);
+    const factory = new ethers.Contract(network.factoryAddress, factoryAbi, wallet);
 
     const FEES = [100, 200, 300, 400, 500, 3000, 10000];
     const pools = await Promise.all(
@@ -79,6 +74,7 @@ export const createPanCakeV3 = () => {
         if (pool !== ethers.ZeroAddress) return fee;
       })
     );
+    console.log("Pools:", pools);
     const activePools = pools.filter(Boolean) as number[];
     if (activePools.length === 0) {
       return [];
@@ -147,12 +143,15 @@ export const createPanCakeV3 = () => {
         TICK_SPACINGS[feeAmount]
       );
 
+      console.log(`Fetching ticks from ${minTick} to ${maxTick}...${tickSpacing}`);
+
       const tickPromises: Promise<{ liquidityGross: any, liquidityNet: any; }>[] = [];
       for (let i = minTick; i <= maxTick; i += tickSpacing) {
-        tickPromises.push(poolContract.ticks(i));
+        tickPromises.push(poolContract.ticks(i).catch(() => Promise.resolve([0, 0])));
       }
 
       const tickResults = await Promise.all(tickPromises);
+
       const ticks = tickResults
         .map((tickData, i) => {
           const tick = minTick + i * tickSpacing;
@@ -165,6 +164,7 @@ export const createPanCakeV3 = () => {
         .filter((tick) => JSBI.toNumber(tick.liquidityNet) > 0);
 
       console.log(`Found ${ticks.length} initialized ticks`);
+      console.log(`tickResults`, ticks);
       return ticks;
     } catch (error) {
       console.error("Error fetching ticks:", error);
@@ -197,8 +197,8 @@ export const createPanCakeV3 = () => {
 
     const tokenInDecimals = await getTokenDecimals(tokenInAddress);
     const tokenOutDecimals = await getTokenDecimals(tokenOutAddress);
-    const tokenIn = new Token(ChainId.BNB, tokenInAddress, tokenInDecimals, "TokenIn", "TokenIn");
-    const tokenOut = new Token(ChainId.BNB, tokenOutAddress, tokenOutDecimals, "TokenOut", "TokenOut");
+    const tokenIn = new Token(network.chainId, tokenInAddress, tokenInDecimals, "TokenIn", "TokenIn");
+    const tokenOut = new Token(network.chainId, tokenOutAddress, tokenOutDecimals, "TokenOut", "TokenOut");
     const poolContract = new ethers.Contract(
       poolAddress,
       poolAbi,
@@ -207,7 +207,7 @@ export const createPanCakeV3 = () => {
     const ticks = await getPoolTicks(poolContract, feeTier);
 
     if (!ticks || ticks.length === 0) {
-      throw new Error("No valid ticks found");
+      throw new Error(`No ticks found for pool ${poolAddress}`);
     }
 
     const tickDataProvider = new TickListDataProvider(
@@ -291,7 +291,7 @@ export const createPanCakeV3 = () => {
 
     // BNB -> WBNB
     const wbnbContract = new ethers.Contract(
-      WBNB_ADDRESS,
+      network.wrappedNativeAddress,
       erc20Abi,
       wallet
     );
@@ -312,12 +312,12 @@ export const createPanCakeV3 = () => {
     console.log(`WBNB difference: ${differenceWbnb}`);
     const wbnbBalance = JSBI.toNumber(JSBI.add(differenceWbnb, JSBI.BigInt(Number(gasPrice))));
     console.log(`WBNB expected allowance: ${wbnbBalance}`);
-    const allowance = await wbnbContract.allowance(wallet.address, PANCAKE_V3_ROUTER);
+    const allowance = await wbnbContract.allowance(wallet.address, network.routerAddress);
     console.log(`WBNB current allowance: ${allowance}`);
 
     if (allowance < wbnbBalance) {
       console.log(`Approving Router to spend WBNB...`);
-      const approveTx = await wbnbContract.approve(PANCAKE_V3_ROUTER, wbnbBalance, {
+      const approveTx = await wbnbContract.approve(network.routerAddress, wbnbBalance, {
         gasPrice,
       });
       await approveTx.wait();
@@ -325,18 +325,18 @@ export const createPanCakeV3 = () => {
     }
 
     // 3) WBNB -> tokenB
-    const router = new ethers.Contract(PANCAKE_V3_ROUTER, routerAbi, wallet);
+    const router = new ethers.Contract(network.routerAddress, routerAbi, wallet);
     // deadline
     const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
 
     const params = {
-      tokenIn: WBNB_ADDRESS,
+      tokenIn: network.wrappedNativeAddress,
       tokenOut: tokenB,
       fee: pool.fee ?? DEFAULT_FEE_TIER,
       recipient: wallet.address,
       deadline,
-      amountIn: BigInt(JSBI.toNumber(differenceWbnb)),
-      amountOutMinimum: JSBI.toNumber(amountOutMinimum),
+      amountIn: BigInt(JSBI.toNumber(JSBI.subtract(differenceWbnb, JSBI.BigInt(Number(gasPrice))))),
+      amountOutMinimum: BigInt(JSBI.toNumber(amountOutMinimum)),
       sqrtPriceLimitX96: 0,
     };
 
@@ -387,10 +387,10 @@ export const createPanCakeV3 = () => {
     }
 
     // 2) Approve Router
-    const allowance = await contractA.allowance(wallet.address, PANCAKE_V3_ROUTER);
+    const allowance = await contractA.allowance(wallet.address, network.routerAddress);
     if (allowance < amountIn) {
       console.log(`Approving router to spend tokenA...`);
-      const appTx = await contractA.approve(PANCAKE_V3_ROUTER, amountIn + gasPrice, {
+      const appTx = await contractA.approve(network.routerAddress, amountIn + gasPrice, {
         gasPrice,
       });
       await appTx.wait();
@@ -398,12 +398,12 @@ export const createPanCakeV3 = () => {
     }
 
     // 3) tokenA -> WBNB
-    const router = new ethers.Contract(PANCAKE_V3_ROUTER, routerAbi, wallet);
+    const router = new ethers.Contract(network.routerAddress, routerAbi, wallet);
     const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
 
     const params = {
       tokenIn: tokenA,
-      tokenOut: WBNB_ADDRESS,
+      tokenOut: network.wrappedNativeAddress,
       fee: pool.fee ?? DEFAULT_FEE_TIER,
       recipient: wallet.address,
       deadline,
@@ -423,7 +423,7 @@ export const createPanCakeV3 = () => {
 
     // 4) Unwrap WBNB -> BNB (withdraw)
     const wbnbContract = new ethers.Contract(
-      WBNB_ADDRESS,
+      network.wrappedNativeAddress,
       erc20Abi,
       wallet
     );
