@@ -13,8 +13,8 @@ async function main() {
   console.log("Pools", reserves);
   // const swap = await pancake.swapBNBForTokens(TST, "0.002", "1");
   // console.log("Swap", swap);
-  // const swap2 = await pancake.swapTokensForBNB(TST, "52", "1");
-  // console.log("Swap2", swap2);
+  const swap2 = await pancake.swapTokensForBNB(TST, "86", "1");
+  console.log("Swap2", swap2);
 }
 
 main();

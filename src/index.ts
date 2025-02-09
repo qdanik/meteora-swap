@@ -1,8 +1,10 @@
 import { mqConnection } from './rabbit';
 import { createMeteora } from './meteora';
-import { RMQ_NOTIFY_QUEUE, RMQ_TX_QUEUE } from './config';
-import { IncomingTransaction } from './types';
-import { hasRequiredFields } from './utils';
+import { RMQ_NOTIFY_QUEUE, RMQ_SWAP_TOKEN, RMQ_TX_QUEUE } from './config';
+import { IncomingSwapToken, IncomingTransaction } from './types';
+import { hasSwapTokenRequiredFields, hasTransactionRequiredFields } from './utils';
+import { handleBNBPancake3 } from './pancake3/pancake3.handler';
+import { handleBNBPancake } from './pancake/pancake.handler';
 
 const start = async () => {
   await mqConnection.connect();
@@ -13,7 +15,7 @@ const start = async () => {
       const parsedMessage = JSON.parse(msg) as IncomingTransaction;
       console.log(`☄️ | 📬 Received Notification: `, parsedMessage);
 
-      if (!hasRequiredFields(parsedMessage)) {
+      if (!hasTransactionRequiredFields(parsedMessage)) {
         throw new Error(`☄️ | ❌ Отсутствуют обязательные поля во входящем cообщении`);
       }
       const buyYForX = parsedMessage.contractAddress === parsedMessage.caY;
@@ -38,7 +40,36 @@ const start = async () => {
     }
   };
 
-  await mqConnection.consume(handleIncomingNotification);
+  const handleIncomingSwapToken = async (msg: string) => {
+    try {
+      const parsedMessage = JSON.parse(msg) as IncomingSwapToken;
+      console.log(`🍰 📬 | Received Swap Token Notification: `, parsedMessage);
+
+      if (!hasSwapTokenRequiredFields(parsedMessage)) {
+        throw new Error(`❌ | Отсутствуют обязательные поля во входящем cообщении`);
+      }
+
+      handleBNBPancake3({
+        mqConnection,
+        address: parsedMessage.address,
+      }).catch(() => {
+        handleBNBPancake({
+          mqConnection,
+          address: parsedMessage.address,
+        });
+      });
+
+    } catch (error) {
+      console.error(`❌ | Could not handle incoming notification: ${error.message}`);
+
+      mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, {
+        text: `❌ | Ошибка при обработке входящего уведомления: ${error.message}`,
+      });
+    }
+  };
+
+  await mqConnection.consume(handleIncomingNotification, RMQ_TX_QUEUE);
+  await mqConnection.consume(handleIncomingSwapToken, RMQ_SWAP_TOKEN);
 
   // Send a test message to the queue to SWAP USDC to SOL
   // await mqConnection.sendToQueue(RMQ_TX_QUEUE, {

@@ -11,6 +11,10 @@ export type IncomingTransaction = {
   priorityFee?: number;
 };
 
+export type IncomingSwapToken = {
+  address: string;
+};
+
 export interface MeteoraPairsResponse {
   pairs: MeteoraPair[];
   total: number;

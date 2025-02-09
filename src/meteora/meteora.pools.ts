@@ -115,7 +115,7 @@ const sellToken = async (address: string, defaultAmount?: number) => {
 
 
 const start = async () => {
-  // await buyToken('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
+  // await buyToken('FeR8VBqNRSUD5NtXAj2n3j1dAHkZHfyDktKuLXD4pump');
   // await getTokenBalance('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
   // await sellToken('6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN');
   // await sellToken('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', 5);

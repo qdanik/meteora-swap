@@ -23,9 +23,9 @@ async function mainV3BnB() {
     return;
   }
 
-  // const swap = await pancakeV3.swapBNBForTokens(TST, "0.002", "1", reserves);
+  // const swap = await pancakeV3.swapNativeForTokens(TST, "0.002", "1", reserves);
   // console.log("Swap", swap);
-  // const swap2 = await pancakeV3.swapTokensForBNB(TST, "10", "1", reserves);
+  // const swap2 = await pancakeV3.swapTokensForNative(TST, "86", "1", reserves);
   // console.log("Swap2", swap2);
 }
 
@@ -45,9 +45,9 @@ async function mainV3ETH() {
     return;
   }
 
-  // const swap = await pancakeV3.swapBNBForTokens(DEGEN, "0.0001", "1", reserves);
+  // const swap = await pancakeV3.swapNativeForTokens(DEGEN, "0.0001", "1", reserves);
   // console.log("Swap", swap);
-  // const swap2 = await pancakeV3.swapTokensForBNB(DEGEN, "67", "1", reserves);
+  // const swap2 = await pancakeV3.swapTokensForNative(DEGEN, "67", "1", reserves);
   // console.log("Swap2", swap2);
 }
 

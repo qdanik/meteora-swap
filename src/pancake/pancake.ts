@@ -1,5 +1,6 @@
 import { ethers, formatUnits, parseEther, parseUnits } from 'ethers';
-import { BSC_PRIVATE_KEY, BSC_RPC_URL } from '../config';
+import { BSC_PRIVATE_KEY, BSC_RPC_URL, RMQ_NOTIFY_QUEUE } from '../config';
+import { RabbitMQConnection } from '../rabbit';
 
 const BSC_FACTORY_ADDRESS = '0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73';
 const BSC_ROUTER_ADDRESS = '0x10ED43C718714eb63d5aA57B78B54704E256024E';
@@ -31,9 +32,17 @@ const erc20Abi = [
   'function approve(address spender, uint256 amount) external returns (bool)'
 ];
 
-export const createPanCake = () => {
+export const createPanCake = (mqConnection?: RabbitMQConnection) => {
+  const logger = (text: string) => {
+    if (mqConnection) {
+      mqConnection?.sendToQueue(RMQ_NOTIFY_QUEUE, { text });
+    }
+
+    console.log(text);
+  };
+
   if (!BSC_PRIVATE_KEY) {
-    throw new Error('BSC_PRIVATE is required');
+    throw new Error(`🎂 ❌ | Неверный приватный ключ для BSC_PRIVATE`);
   }
 
   const provider = new ethers.JsonRpcProvider(BSC_RPC_URL);
@@ -89,13 +98,13 @@ export const createPanCake = () => {
 
   const swapBNBForTokens = async (
     tokenB: string,
-    bnbAmount: string,
+    amount: string,
     priorityFee: string
   ) => {
     const router = new ethers.Contract(BSC_ROUTER_ADDRESS, routerAbi, wallet);
 
     const walletBalance = await provider.getBalance(wallet.address);
-    const amountInBNB = parseEther(bnbAmount);
+    const amountInBNB = parseEther(amount);
     if (walletBalance < amountInBNB) {
       throw new Error(`Insufficient BNB balance: have=${walletBalance} need=${amountInBNB}`);
     }
@@ -107,6 +116,8 @@ export const createPanCake = () => {
     const to = wallet.address;
     const deadline = BigInt(Math.floor(Date.now() / 1000 + 60 * 5));
 
+    logger(`🎂 ⌛️ | Свап <b>BNB</b> -> <b>${tokenB}</b> на <b>${amount} BNB</b>...`);
+
     const tx = await router.swapExactETHForTokens(
       amountOutMin,
       path,
@@ -117,6 +128,8 @@ export const createPanCake = () => {
         gasPrice: ethers.parseUnits(priorityFee, 'gwei'),
       }
     );
+
+    logger(`🎂 ✅ | Свап <b>BNB</b> -> <b>${tokenB}</b> завершен!\nТранзакция: <code>${tx.hash}</code>`);
 
     console.log(`Swap BNB->Token sent: ${tx.hash}`);
     const receipt = await tx.wait();

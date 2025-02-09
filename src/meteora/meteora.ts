@@ -1,6 +1,6 @@
 import { BN } from '@coral-xyz/anchor';
 import DLMM, { BinArrayAccount, type SwapParams } from '@meteora-ag/dlmm';
-import { ComputeBudgetProgram, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, SendTransactionError, SystemProgram, Transaction } from '@solana/web3.js';
+import { ComputeBudgetProgram, Connection, Keypair, LAMPORTS_PER_SOL, PublicKey, sendAndConfirmTransaction, Transaction } from '@solana/web3.js';
 import { bs58 } from '@coral-xyz/anchor/dist/cjs/utils/bytes';
 import { SOLANA_PRIVATE_KEY, SOL_RPC_URL, DEFAULT_SLIPPAGE, DEFAULT_CA, DEFAULT_USDC_AMOUNT, DEFAULT_SOL_AMOUNT, MAX_RETRY, RMQ_NOTIFY_QUEUE, DEFAULT_PRIORITY_FEE } from '../config';
 import { RabbitMQConnection } from '../rabbit';

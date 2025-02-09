@@ -3,6 +3,8 @@ import { BASE_PRIVATE_KEY, BASE_RPC_URL, BSC_PRIVATE_KEY, BSC_RPC_URL } from '..
 
 export interface NetworkConfig {
   chainId: number;
+  name: string;
+  wrappedName: string;
   rpcUrl: string;
   privateKey: string;
   factoryAddress: string;
@@ -13,6 +15,8 @@ export interface NetworkConfig {
 export const NETWORKS = {
   BNB: {
     chainId: ChainId.BNB,
+    name: 'BNB',
+    wrappedName: 'WBNB',
     rpcUrl: BSC_RPC_URL ?? '',
     privateKey: BSC_PRIVATE_KEY ?? '',
     factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
@@ -21,6 +25,8 @@ export const NETWORKS = {
   },
   BASE: {
     chainId: ChainId.BASE,
+    name: 'ETH',
+    wrappedName: 'WETH',
     rpcUrl: BASE_RPC_URL ?? '',
     privateKey: BASE_PRIVATE_KEY ?? '',
     factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",

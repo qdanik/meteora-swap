@@ -8,6 +8,7 @@
     "dev:pancake": "ts-node src/pancake/pancake.example.ts",
     "dev:pancake3": "ts-node src/pancake3/pancake3.example.ts",
     "dev:uniswap": "ts-node src/uniswap/uniswap.example.ts",
+    "sol:pools": "ts-node src/meteora/meteora.pools.ts",
     "start": "nodemon dist/index.js localhost 8000",
     "build": "tsc"
   },

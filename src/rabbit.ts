@@ -14,12 +14,12 @@ export class RabbitMQConnection {
     const delay = 1000 * this.retryCount;
     setTimeout(async () => {
       try {
-        console.log(`☄️ | ⌛️ Reconnecting to RabbitMQ Server in ${(delay / 1000).toFixed(0)}s`);
+        console.log(`🐰 | ⌛️ Reconnecting to RabbitMQ Server in ${(delay / 1000).toFixed(0)}s`);
         this.retryCount++;
         await this.connect();
         this.retryCount = 1;
       } catch (error) {
-        console.error(`☄️ | ❌ Error in Reconnecting to RabbitMQ Server`);
+        console.error(`🐰 | ❌ Error in Reconnecting to RabbitMQ Server`);
       }
     }, delay);
   }
@@ -29,7 +29,7 @@ export class RabbitMQConnection {
     else this.connected = true;
 
     try {
-      console.log(`☄️ | ⌛️ Connecting to Rabbit-MQ Server`);
+      console.log(`🐰 | ⌛️ Connecting to Rabbit-MQ Server`);
       this.connection = await client.connect({
         protocol: 'amqp',
         username: RMQ_USER,
@@ -39,24 +39,24 @@ export class RabbitMQConnection {
         heartbeat: 300,
       });
 
-      console.log(`☄️ | ✅ Rabbit MQ Connection is ready`);
+      console.log(`🐰 | ✅ Rabbit MQ Connection is ready`);
       this.channel = await this.connection.createChannel();
 
       this.connection.on('error', (err) => {
-        console.error(`☄️ | ❌ Error in RabbitMQ Connection: ${err.message}`);
+        console.error(`🐰 | ❌ Error in RabbitMQ Connection: ${err.message}`);
       });
 
       this.connection.on('close', () => {
-        console.error(`☄️ | ❌ RabbitMQ Connection closed`);
+        console.error(`🐰 | ❌ RabbitMQ Connection closed`);
         this.connected = false;
         // Reconnect
         this.reconnect();
       });
 
-      console.log(`☄️ | 🛸 Created RabbitMQ Channel successfully`);
+      console.log(`🐰 | 🛸 Created RabbitMQ Channel successfully`);
     } catch (error) {
       console.error(error);
-      console.error(`☄️ | ❌ Not connected to MQ Server`);
+      console.error(`🐰 | ❌ Not connected to MQ Server`);
       this.connected = false;
       // Reconnect
       this.reconnect();
@@ -84,7 +84,7 @@ export class RabbitMQConnection {
 
     const handleConsumeQueue = (msg: ConsumeMessage) => {
       if (!msg) {
-        return console.error(`☄️ | ❌ Invalid incoming message`);
+        return console.error(`🐰 | ❌ Invalid incoming message`);
       }
       handler(msg?.content?.toString());
       this.channel.ack(msg);

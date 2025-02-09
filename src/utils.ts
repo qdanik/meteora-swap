@@ -1,6 +1,6 @@
-import { IncomingTransaction } from './types';
+import { IncomingSwapToken, IncomingTransaction } from './types';
 
-export const hasRequiredFields = (message: IncomingTransaction): message is IncomingTransaction => {
+export const hasTransactionRequiredFields = (message: IncomingTransaction): message is IncomingTransaction => {
   return (
     !!message.poolAddress &&
     !!message.contractAddress &&
@@ -9,4 +9,8 @@ export const hasRequiredFields = (message: IncomingTransaction): message is Inco
     !!message.caX &&
     !!message.caY
   );
+};
+
+export const hasSwapTokenRequiredFields = (message: IncomingSwapToken): message is IncomingSwapToken => {
+  return !!message.address;
 };
