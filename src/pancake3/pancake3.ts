@@ -392,7 +392,7 @@ export const createPanCakeV3 = (network: NetworkConfig, mqConnection?: RabbitMQC
       recipient: wallet.address,
       deadline,
       amountIn,
-      amountOutMinimum: JSBI.toNumber(amountOutMinimum),
+      amountOutMinimum: BigInt(JSBI.toNumber(amountOutMinimum)),
       sqrtPriceLimitX96: 0,
     };
 

@@ -10,7 +10,8 @@
     "dev:uniswap": "ts-node src/uniswap/uniswap.example.ts",
     "sol:pools": "ts-node src/meteora/meteora.pools.ts",
     "start": "nodemon dist/index.js localhost 8000",
-    "build": "tsc"
+    "build": "tsc",
+    "postinstall": "yarn patch-package"
   },
   "author": "",
   "license": "ISC",
@@ -31,6 +32,10 @@
   "devDependencies": {
     "@types/amqplib": "^0.10.6",
     "nodemon": "^3.1.9",
+    "patch-package": "^8.0.0",
     "ts-node": "^10.9.2"
+  },
+  "resolutions": {
+    "jsbi": "^4.3.0"
   }
 }

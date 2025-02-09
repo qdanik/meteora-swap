@@ -1,4 +1,4 @@
-import { DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, RMQ_NOTIFY_QUEUE } from '../config';
+import { DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, MAX_RETRY, RMQ_NOTIFY_QUEUE } from '../config';
 import { RabbitMQConnection } from '../rabbit';
 import { createPanCakeV3 } from './pancake3';
 import { NETWORKS } from './pancake3.constants';
@@ -27,7 +27,13 @@ export const handleBNBPancake3 = async ({
       return;
     }
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${reserves.address}</code>` });
-    await pancakeV3.swapNativeForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, reserves);
+    await pancakeV3.swapNativeForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, reserves).catch(async (error) => {
+      if (error?.shortMessage === 'transaction execution reverted') {
+        return await pancakeV3.swapTokensForNative(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, reserves);
+      }
+
+      return Promise.reject(error);
+    });
   } catch (error) {
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ❌ | Ошибка при свапе: ${error.message}` });
     console.error(`🍰 | ❌ Error in swap: ${error.message}`);

@@ -25,7 +25,7 @@ async function mainV3BnB() {
 
   // const swap = await pancakeV3.swapNativeForTokens(TST, "0.002", "1", reserves);
   // console.log("Swap", swap);
-  // const swap2 = await pancakeV3.swapTokensForNative(TST, "86", "1", reserves);
+  // const swap2 = await pancakeV3.swapTokensForNative(TST, "1", "1", reserves);
   // console.log("Swap2", swap2);
 }
 

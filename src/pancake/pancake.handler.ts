@@ -26,7 +26,13 @@ export const handleBNBPancake = async ({
       return;
     }
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${pool}</code>` });
-    await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI);
+    await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI).catch(async (error) => {
+      if (error?.shortMessage === 'transaction execution reverted') {
+        return await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI);
+      }
+
+      return Promise.reject(error);
+    });;
   } catch (error) {
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🎂 ❌ | Ошибка при свапе: ${error.message}` });
     console.error(`🎂 | ❌ Error in swap: ${error.message}`);
