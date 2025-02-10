@@ -1,4 +1,3 @@
-import { ChainId } from '@uniswap/sdk-core';
 import { BASE_PRIVATE_KEY, BASE_RPC_URL, BSC_PRIVATE_KEY, BSC_RPC_URL, ETH_PRIVATE_KEY, ETH_RPC_URL } from '../config';
 
 export interface NetworkConfig {
@@ -12,7 +11,7 @@ export interface NetworkConfig {
 
 export const NETWORKS = {
   BNB: {
-    chainId: ChainId.BNB,
+    chainId: 56,
     rpcUrl: BSC_RPC_URL ?? '',
     privateKey: BSC_PRIVATE_KEY ?? '',
     factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
@@ -20,7 +19,7 @@ export const NETWORKS = {
     wrappedNativeAddress: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
   },
   BASE: {
-    chainId: ChainId.BASE,
+    chainId: 8453,
     rpcUrl: BASE_RPC_URL ?? '',
     privateKey: BASE_PRIVATE_KEY ?? '',
     factoryAddress: "0x33128a8fc17869897dce68ed026d694621f6fdfd",

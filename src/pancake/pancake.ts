@@ -24,7 +24,6 @@ const routerAbi = [
   'function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline) external returns (uint[] memory amounts)'
 ];
 
-// ERC20 ABI (для balanceOf, allowance, approve)
 const erc20Abi = [
   'function decimals() view returns (uint8)',
   'function balanceOf(address owner) view returns (uint256)',

@@ -1,4 +1,4 @@
-import { DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, RMQ_NOTIFY_QUEUE } from '../config';
+import { DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, MAX_RETRY, RMQ_NOTIFY_QUEUE } from '../config';
 import { RabbitMQConnection } from '../rabbit';
 import { createPanCake } from './pancake';
 
@@ -12,6 +12,7 @@ export const handleBNBPancake = async ({
   address: string;
 }) => {
   try {
+    let retryCount = 0;
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🎂 ⌛️ | Начинаю свап <code>${address}</code> через PanCakeV2` });
     const pancake = createPanCake(mqConnection);
 
@@ -25,14 +26,23 @@ export const handleBNBPancake = async ({
       console.log(`🎂 | ❌ Pools not found`);
       return;
     }
-    mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${pool}</code>` });
-    await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI).catch(async (error) => {
-      if (error?.shortMessage === 'transaction execution reverted') {
-        return await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI);
-      }
 
-      return Promise.reject(error);
-    });;
+    const swapToken = async (token: string) => {
+      try {
+        return await pancake.swapBNBForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI);
+      } catch (error) {
+        if (retryCount < MAX_RETRY) {
+          retryCount++;
+          console.log(`🍰 ⌛️ | (${retryCount}) Попробуем ещё раз...`);
+          mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | (${retryCount}) Попробуем ещё раз...` });
+          return Promise.resolve(swapToken(token));
+        }
+        return Promise.reject(error);
+      }
+    };
+
+    mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${pool}</code>` });
+    await swapToken(address);
   } catch (error) {
     mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🎂 ❌ | Ошибка при свапе: ${error.message}` });
     console.error(`🎂 | ❌ Error in swap: ${error.message}`);

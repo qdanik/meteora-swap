@@ -1,434 +1,260 @@
-import { ethers, parseEther, parseUnits, formatUnits } from "ethers";
-import { DEFAULT_SLIPPAGE, RMQ_NOTIFY_QUEUE } from "../config";
-import { Pool, Route, Trade, TICK_SPACINGS, nearestUsableTick, TickListDataProvider, FeeAmount } from "@uniswap/v3-sdk";
-import {
-  Token,
-  CurrencyAmount,
-  Percent,
-  TradeType,
-} from "@uniswap/sdk-core";
-import JSBI from 'jsbi';
-import { NetworkConfig } from './pancake3.constants';
-import { DEFAULT_FEE_TIER, erc20Abi, factoryAbi, poolAbi, routerAbi } from './pancake3.abis';
-import { RabbitMQConnection } from '../rabbit';
+import { ethers, parseEther, parseUnits, formatUnits } from 'ethers';
+import { DEFAULT_SLIPPAGE } from '../config';
+import { FEE_POOLS, NetworkConfig } from './pancake3.constants';
+import { DEFAULT_FEE_TIER, ERC20_ABI, FACTORY_ABI, POOL_ABI, ROUTER_ABI } from './pancake3.abis';
+import { computeAmountOutMinSingleHop, getDeadline } from './pancake3.helpers';
 
-export const createPanCakeV3 = (network: NetworkConfig, mqConnection?: RabbitMQConnection) => {
-  const logger = (text: string) => {
-    if (mqConnection) {
-      mqConnection?.sendToQueue(RMQ_NOTIFY_QUEUE, { text });
-    }
-
-    console.log(text);
-  };
-
+export function createPanCakeV3(
+  network: NetworkConfig,
+  logAndNotify: (message: string) => void
+) {
   if (!network.privateKey) {
-    throw new Error(`🍰 ❌ | Неверный приватный ключ для ${network.chainId}`);
+    throw new Error(`🍰 ❌ | Неверный приватный ключ для chainId=${network.chainId}`);
   }
 
   const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-  const wallet = new ethers.Wallet(network.privateKey, provider);
+  const signer = new ethers.Wallet(network.privateKey, provider);
 
   async function getTokenDecimals(tokenAddress: string) {
-    const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, provider);
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
     return Number(await tokenContract.decimals());
   }
 
-  async function formatToken(token: string, rawAmount: bigint) {
-    const decimals = await getTokenDecimals(token);
+  async function formatToken(tokenAddress: string, rawAmount: bigint) {
+    const decimals = await getTokenDecimals(tokenAddress);
     return formatUnits(rawAmount, decimals);
   }
 
-  async function parseToken(token: string, amountStr: string) {
-    const decimals = await getTokenDecimals(token);
+  async function parseToken(tokenAddress: string, amountStr: string) {
+    const decimals = await getTokenDecimals(tokenAddress);
     return parseUnits(amountStr, decimals);
   }
 
-  const getPair = async (token0: string, token1: string) => {
-    const factory = new ethers.Contract(network.factoryAddress, factoryAbi, wallet);
+  async function checkAndApproveToken(
+    tokenAddress: string,
+    spender: string,
+    requiredAmount: bigint,
+    gasPrice: bigint
+  ) {
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+    const currentAllowance = await tokenContract.allowance(signer.address, spender);
 
-    const FEES = [100, 200, 300, 400, 500, 3000, 10000];
+    if (currentAllowance < requiredAmount) {
+      logAndNotify(`🍰 ⌛️ | Аппрув ${tokenAddress} для спендера: ${spender}...`);
+      const approveTx = await tokenContract.approve(spender, requiredAmount, { gasPrice });
+      await approveTx.wait();
+      logAndNotify(`🍰 ✅ | Аппрув ${tokenAddress} успешно выполнен!`);
+    }
+  }
+
+  async function wrapNativeToken(amountWei: bigint, gasPrice: bigint) {
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+
+    logAndNotify(
+      `🍰 ⌛️ | Оборачиваем ${amountWei} wei (${network.name}) в ${network.wrappedName}...`
+    );
+    const wrapTx = await wrappedContract.deposit({ value: amountWei, gasPrice });
+    await wrapTx.wait();
+    logAndNotify(`🍰 ✅ | Получено ${network.wrappedName}!`);
+  }
+
+  async function unwrapNativeToken(amountWei: bigint, gasPrice: bigint) {
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+
+    if (amountWei > 0n) {
+      logAndNotify(
+        `🍰 ⌛️ | Распаковываем ${amountWei} wei (${network.wrappedName}) в ${network.name}...`
+      );
+      const withdrawTx = await wrappedContract.withdraw(amountWei, { gasPrice });
+      await withdrawTx.wait();
+      logAndNotify(`🍰 ✅ | Получено ${network.name}!`);
+    }
+  }
+
+  async function getPairPools(tokenA: string, tokenB: string) {
+    const factory = new ethers.Contract(network.factoryAddress, FACTORY_ABI, signer);
+
     const pools = await Promise.all(
-      FEES.map(async (fee) => {
-        const pool = await factory.getPool(token0, token1, fee);
-        if (pool !== ethers.ZeroAddress) return fee;
+      FEE_POOLS.map(async (fee) => {
+        const poolAddress = await factory.getPool(tokenA, tokenB, fee);
+        return poolAddress !== ethers.ZeroAddress ? fee : null;
       })
     );
-    console.log("Pools:", pools);
-    const activePools = pools.filter(Boolean) as number[];
-    if (activePools.length === 0) {
+
+    const activeFees = pools.filter(Boolean) as number[];
+    if (activeFees.length === 0) {
       return [];
     }
 
-    return await Promise.all(activePools.map(async (fee) => ({
-      fee,
-      pool: await factory.getPool(token0, token1, fee),
-    })));
-  };
+    return Promise.all(
+      activeFees.map(async (fee) => {
+        const poolAddress = await factory.getPool(tokenA, tokenB, fee);
+        return { fee, pool: poolAddress };
+      })
+    );
+  }
 
-  const getReserves = async (pools: { fee: number, pool: string; }[]) => {
+  async function getPoolData(pool: { fee: number, pool: string; }) {
+    const poolContract = new ethers.Contract(pool.pool, POOL_ABI, signer);
+    const [liquidityBn, slot0Data] = await Promise.all([
+      poolContract.liquidity(),
+      poolContract.slot0(),
+    ]);
+
+    return {
+      address: pool.pool,
+      fee: pool.fee,
+      sqrtPriceX96: slot0Data[0].toString(),
+      liquidity: liquidityBn.toString(),
+    };
+  }
+
+  async function findPools(pools: Array<{ fee: number; pool: string; }>) {
     if (pools.length === 0) {
       return 'Pools not found';
     }
 
-    const reserves = await Promise.all(pools.map(async ({ pool, fee }) => {
-      const poolContract = new ethers.Contract(pool, poolAbi, wallet);
-      const [liq, slot0Data, token0, token1] = await Promise.all([
-        poolContract.liquidity(),
-        poolContract.slot0(),
-        poolContract.token0(),
-        poolContract.token1(),
-      ]);
-      const sqrtPriceX96 = slot0Data[0].toString();
-      const tickCurrent = slot0Data[1];
-      const liquidity = liq.toString();
+    const poolReserves = await Promise.all(pools.map(getPoolData));
+    const sorted = poolReserves.sort((poolA, poolB) => Number(poolA.liquidity) - Number(poolB.liquidity));
+    const mostLiquid = sorted[sorted.length - 1];
 
-      return {
-        address: pool,
-        fee,
-        token0,
-        token1,
-        sqrtPriceX96,
-        tickCurrent: Number(tickCurrent),
-        liquidity,
-      };
-    }));
-    const sorted = reserves.sort((a, b) => a.liquidity - b.liquidity);
-    const moreLiquid = sorted[sorted.length - 1];
-
-    if (!moreLiquid || !moreLiquid.liquidity) {
-      throw new Error(`No liquidity found in pools: ${pools.map((p) => p.pool).join(", ")}`);
-    }
-
-    return moreLiquid;
-  };
-
-  function getTickRange(currentTick: number, tickSpacing: number) {
-    const nearestTick = nearestUsableTick(currentTick, tickSpacing);
-
-    const numTicksAround = 10;
-    const minTick = nearestTick - tickSpacing * numTicksAround;
-    const maxTick = nearestTick + tickSpacing * numTicksAround;
-
-    return { minTick, maxTick, tickSpacing };
-  }
-
-  async function getPoolTicks(poolContract: ethers.Contract, feeAmount: FeeAmount) {
-    try {
-      const slot0 = await poolContract.slot0();
-      const currentTick = Number(slot0.tick);
-
-      const { minTick, maxTick, tickSpacing } = getTickRange(
-        currentTick,
-        TICK_SPACINGS[feeAmount]
+    if (!mostLiquid || !mostLiquid.liquidity) {
+      throw new Error(
+        `🍰 ❌ | Ликвидность в пулах не найдена: ${pools.map((pool) => pool.pool).join(', ')}`
       );
-
-      console.log(`Fetching ticks from ${minTick} to ${maxTick}...`);
-
-      const tickPromises: Promise<{ liquidityGross: any, liquidityNet: any; }>[] = [];
-      for (let i = minTick; i <= maxTick; i += tickSpacing) {
-        tickPromises.push(poolContract.ticks(i).catch(() => Promise.resolve([0, 0])));
-      }
-
-      const tickResults = await Promise.all(tickPromises);
-
-      const ticks = tickResults
-        .map((tickData, i) => {
-          const tick = minTick + i * tickSpacing;
-          return {
-            index: +tick,
-            liquidityNet: JSBI.BigInt(Number(tickData[1])),
-            liquidityGross: JSBI.BigInt(Number(tickData[0])),
-          };
-        })
-        .filter((tick) => JSBI.toNumber(tick.liquidityNet) > 0);
-
-      console.log(`Found ${ticks.length} initialized ticks`);
-      return ticks;
-    } catch (error) {
-      console.error("Error fetching ticks:", error);
-      throw error;
-    }
-  }
-
-  async function computeAmountOutMinSingleHop(params: {
-    poolAddress: string;
-    tokenInAddress: string;
-    tokenOutAddress: string;
-    feeTier: number;
-    amountInHuman: string;
-    slippageBps: number;
-    sqrtPriceX96: string;
-    liquidity: string;
-    tickCurrent: number;
-  }) {
-    const {
-      poolAddress,
-      tokenInAddress,
-      tokenOutAddress,
-      feeTier,
-      amountInHuman,
-      slippageBps,
-      sqrtPriceX96,
-      liquidity,
-      tickCurrent,
-    } = params;
-
-    const tokenInDecimals = await getTokenDecimals(tokenInAddress);
-    const tokenOutDecimals = await getTokenDecimals(tokenOutAddress);
-    const tokenIn = new Token(network.chainId, tokenInAddress, tokenInDecimals, "TokenIn", "TokenIn");
-    const tokenOut = new Token(network.chainId, tokenOutAddress, tokenOutDecimals, "TokenOut", "TokenOut");
-    const poolContract = new ethers.Contract(
-      poolAddress,
-      poolAbi,
-      provider
-    );
-    const ticks = await getPoolTicks(poolContract, feeTier);
-
-    if (!ticks || ticks.length === 0) {
-      throw new Error(`No ticks found for pool ${poolAddress}`);
     }
 
-    const tickDataProvider = new TickListDataProvider(
-      ticks,
-      TICK_SPACINGS[feeTier]
-    );
-
-    const pool = new Pool(
-      tokenIn,
-      tokenOut,
-      feeTier,
-      sqrtPriceX96,
-      liquidity,
-      tickCurrent,
-      tickDataProvider,
-    );
-    const amountIn = CurrencyAmount.fromRawAmount(
-      tokenIn,
-      ethers.parseUnits(amountInHuman, tokenInDecimals).toString()
-    );
-    console.log("amountIn:", amountIn.toExact());
-
-    const route = new Route([pool], tokenIn, tokenOut);
-    const trade = await Trade.fromRoute(route, amountIn, TradeType.EXACT_INPUT);
-
-    const expectedOut = trade.outputAmount;
-    console.log("expectedOut:", expectedOut.toExact());
-
-    const slippageTolerance = new Percent(slippageBps, 10_000);
-    const minimumAmountOut = trade.minimumAmountOut(slippageTolerance);
-    console.log(`minOut (with slippage ${slippageBps / 100}%):`, minimumAmountOut.toExact());
-
-    const rawMinOut = minimumAmountOut.quotient;
-    console.log("amountOutMinimum (raw bigint):", rawMinOut.toString());
-
-    return rawMinOut;
+    return mostLiquid;
   }
 
-  async function getTokenBalance(token: string) {
-    const contract = new ethers.Contract(token, erc20Abi, wallet);
-    const rawBal = await contract.balanceOf(wallet.address);
-    return formatToken(token, rawBal);
+  async function getTokenBalance(tokenAddress: string) {
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, signer);
+    const rawBalance = await tokenContract.balanceOf(signer.address);
+    return formatToken(tokenAddress, rawBalance);
   }
 
-  const swapNativeForTokens = async (
-    tokenB: string,
-    amount: string,
-    priorityFee: string,
-    pool: {
-      address: string;
+  async function buyToken(
+    tokenOut: string,
+    nativeAmountStr: string,
+    priorityFeeGwei: string,
+    poolData: {
       fee: number;
-      token0: string;
-      token1: string;
       sqrtPriceX96: string;
-      liquidity: string;
-      tickCurrent: number;
     }
-  ) => {
-    const amountOutMinimum = await computeAmountOutMinSingleHop({
-      poolAddress: pool.address,
-      tokenInAddress: pool.token0,
-      tokenOutAddress: pool.token1,
-      feeTier: pool.fee ?? DEFAULT_FEE_TIER,
-      amountInHuman: amount,
-      slippageBps: DEFAULT_SLIPPAGE * 100,
-      sqrtPriceX96: pool.sqrtPriceX96,
-      liquidity: pool.liquidity,
-      tickCurrent: pool.tickCurrent,
-    });
-
-    const walletBalance = await provider.getBalance(wallet.address);
-    const gasPrice = ethers.parseUnits(priorityFee, "gwei");
-    const payAmount = parseEther(amount);
-    const fullPayAmount = payAmount + gasPrice;
-
-    console.log(`Wallet balance: ${walletBalance}`);
-    console.log(`Gas price: ${Number(gasPrice)}`);
-    console.log(`${network.name} needed: ${fullPayAmount}`);
-
-    // Native Token -> Wrapped Native Token
-    const wrappedContract = new ethers.Contract(
-      network.wrappedNativeAddress,
-      erc20Abi,
-      wallet
+  ) {
+    const amountOutMinimum = computeAmountOutMinSingleHop(
+      poolData.sqrtPriceX96,
+      DEFAULT_SLIPPAGE * 100
     );
-    console.log(`Wrapping ${fullPayAmount} ${network.name} into ${network.wrappedName}...`);
-    const currentWrappedBalance = await wrappedContract.balanceOf(wallet.address);
-    if (currentWrappedBalance < fullPayAmount) {
-      if (walletBalance < fullPayAmount) {
-        throw new Error(`Insufficient ${network.name}: have=${walletBalance}, need=${fullPayAmount}`);
-      }
 
-      const wrapTx = await wrappedContract.deposit({
-        value: fullPayAmount,
-        gasPrice,
-      });
-      await wrapTx.wait();
-    }
-    console.log(`${network.wrappedName} minted!`);
+    const walletNativeBalance = await provider.getBalance(signer.address);
+    const gasPrice = ethers.parseUnits(priorityFeeGwei, 'gwei');
+    const userPayAmount = parseEther(nativeAmountStr);
+    const totalNeeded = userPayAmount + gasPrice; // для простоты считаем, что мы платим gasPrice поверх userPayAmount
 
-    // Approve
-    const totalWrappedBalance = await wrappedContract.balanceOf(wallet.address);
-    console.log(`${network.wrappedName} balance (before): ${currentWrappedBalance}`);
-    console.log(`${network.wrappedName} balance (after): ${totalWrappedBalance}`);
-    console.log(`${network.wrappedName} pay amount: ${payAmount}`);
-
-    const allowance = await wrappedContract.allowance(wallet.address, network.routerAddress);
-    console.log(`${network.wrappedName} expected allowance: ${totalWrappedBalance}`);
-    console.log(`${network.wrappedName} current allowance: ${allowance}`);
-
-    if (allowance < totalWrappedBalance) {
-      logger(`🍰 ⌛️ | Аппрув Router на трату <b>${network.wrappedName}</b>...`);
-      console.log(`Approving Router to spend ${network.wrappedName}...`);
-      const approveTx = await wrappedContract.approve(network.routerAddress, totalWrappedBalance, {
-        gasPrice,
-      });
-      await approveTx.wait();
-      console.log(`Approved!`);
+    if (walletNativeBalance < totalNeeded) {
+      throw new Error(
+        `🍰 ❌ | Недостаточно ${network.name}: есть - ${walletNativeBalance}, нужно - ${totalNeeded}`
+      );
     }
 
-    // 3) Wrapped Native Token -> tokenB
-    const router = new ethers.Contract(network.routerAddress, routerAbi, wallet);
-    // deadline
-    const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
+    await wrapNativeToken(totalNeeded, gasPrice);
 
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+    const userWrappedBalance = await wrappedContract.balanceOf(signer.address);
+    await checkAndApproveToken(network.wrappedNativeAddress, network.routerAddress, userWrappedBalance, gasPrice);
+
+    const routerContract = new ethers.Contract(network.routerAddress, ROUTER_ABI, signer);
+    const deadline = getDeadline(5);
     const params = {
       tokenIn: network.wrappedNativeAddress,
-      tokenOut: tokenB,
-      fee: pool.fee ?? DEFAULT_FEE_TIER,
-      recipient: wallet.address,
+      tokenOut,
+      fee: poolData.fee ?? DEFAULT_FEE_TIER,
+      recipient: signer.address,
       deadline,
-      amountIn: payAmount,
-      amountOutMinimum: BigInt(JSBI.toNumber(amountOutMinimum)),
+      amountIn: userPayAmount,
+      amountOutMinimum,
       sqrtPriceLimitX96: 0,
     };
+    console.log(`🍰 ⓘ | Параметры:`, params);
 
-    logger(`🍰 ⌛️ | Свап <b>${network.wrappedName}</b> -> <b>${tokenB}</b> на <b>${amount} ${network.wrappedName}</b>...`);
-    console.log(`Swapping ${network.wrappedName} -> ${tokenB} using exactInputSingle...`);
-    console.log("params:", params);
-    const tx = await router.exactInputSingle(params, {
-      gasPrice,
-    });
-    console.log("tx hash:", tx.hash);
-    const rcpt = await tx.wait();
-    console.log(`Swap ${network.name} -> Token confirmed in block ${rcpt.blockNumber}`);
-    logger(`🍰 ✅ | Свап <b>${network.wrappedName}</b> -> <b>${tokenB}</b> завершен!\nТранзакция: <code>${tx.hash}</code>`);
+    logAndNotify(
+      `🍰 ⌛️ | Свап ${network.wrappedName} -> ${tokenOut} на сумму ${nativeAmountStr} ${network.wrappedName}...`
+    );
 
-    return rcpt;
-  };
+    const swapTx = await routerContract.exactInputSingle(params, { gasPrice });
+    logAndNotify(`🍰 ⌛️ | Транзакция свапа отправлена: ${swapTx.hash}`);
+    const swapReceipt = await swapTx.wait();
+    logAndNotify(
+      `🍰 ✅ | Свап ${network.wrappedName} -> ${tokenOut} выполнен (блок: ${swapReceipt.blockNumber}). Тх: ${swapTx.hash}`
+    );
 
-  const swapTokensForNative = async (
-    tokenA: string,
-    tokenAmount: string,
-    priorityFee: string,
-    pool: {
-      address: string;
+    return swapReceipt;
+  }
+
+  async function sellToken(
+    tokenIn: string,
+    tokenAmountStr: string,
+    priorityFeeGwei: string,
+    poolData: {
       fee: number;
-      token0: string;
-      token1: string;
       sqrtPriceX96: string;
-      liquidity: string;
-      tickCurrent: number;
     }
-  ) => {
-    const amountOutMinimum = await computeAmountOutMinSingleHop({
-      poolAddress: pool.address,
-      tokenInAddress: pool.token0,
-      tokenOutAddress: pool.token1,
-      feeTier: pool.fee ?? DEFAULT_FEE_TIER,
-      amountInHuman: tokenAmount,
-      slippageBps: DEFAULT_SLIPPAGE * 100,
-      sqrtPriceX96: pool.sqrtPriceX96,
-      liquidity: pool.liquidity,
-      tickCurrent: pool.tickCurrent,
-    });
-    // 1) Check balance
-    const contractA = new ethers.Contract(tokenA, erc20Abi, wallet);
-    const amountIn = await parseToken(tokenA, tokenAmount);
-    const balanceA = await contractA.balanceOf(wallet.address);
-    const gasPrice = ethers.parseUnits(priorityFee, "gwei");
-    if (balanceA < amountIn) {
-      throw new Error(`Insufficient tokenA: have ${balanceA}, need ${amountIn}`);
+  ) {
+    const amountOutMinimum = computeAmountOutMinSingleHop(
+      poolData.sqrtPriceX96,
+      DEFAULT_SLIPPAGE * 100
+    );
+
+    const tokenContract = new ethers.Contract(tokenIn, ERC20_ABI, signer);
+    const amountIn = await parseToken(tokenIn, tokenAmountStr);
+    const currentBalance = await tokenContract.balanceOf(signer.address);
+    if (currentBalance < amountIn) {
+      throw new Error(
+        `🍰 ❌ | Недостаточно токена ${tokenIn}: есть - ${currentBalance}, нужно - ${amountIn}`
+      );
     }
 
-    // 2) Approve Router
-    const allowance = await contractA.allowance(wallet.address, network.routerAddress);
-    if (allowance < amountIn) {
-      console.log(`Approving router to spend tokenA...`);
-      const appTx = await contractA.approve(network.routerAddress, amountIn + gasPrice, {
-        gasPrice,
-      });
-      await appTx.wait();
-      console.log(`Approved`);
-    }
+    const gasPrice = ethers.parseUnits(priorityFeeGwei, 'gwei');
+    await checkAndApproveToken(tokenIn, network.routerAddress, amountIn, gasPrice);
 
-    // 3) tokenA -> Wrapped Native Token (swap)
-    const router = new ethers.Contract(network.routerAddress, routerAbi, wallet);
-    const deadline = Math.floor(Date.now() / 1000) + 60 * 5;
-
+    const routerContract = new ethers.Contract(network.routerAddress, ROUTER_ABI, signer);
+    const deadline = getDeadline(5);
     const params = {
-      tokenIn: tokenA,
+      tokenIn,
       tokenOut: network.wrappedNativeAddress,
-      fee: pool.fee ?? DEFAULT_FEE_TIER,
-      recipient: wallet.address,
+      fee: poolData.fee ?? DEFAULT_FEE_TIER,
+      recipient: signer.address,
       deadline,
       amountIn,
-      amountOutMinimum: BigInt(JSBI.toNumber(amountOutMinimum)),
-      sqrtPriceLimitX96: 0,
+      amountOutMinimum,
+      sqrtPriceLimitX96: poolData.sqrtPriceX96,
     };
-
-    console.log(`Swapping tokenA -> ${network.wrappedName} using exactInputSingle...`);
-    console.log("params:", params);
-    const transaction = await router.exactInputSingle(params, {
-      gasPrice,
-    });
-    console.log("tx hash:", transaction.hash);
-    const receipt = await transaction.wait();
-    console.log(`Swap token -> ${network.wrappedName} confirmed in block ${receipt.blockNumber}`);
-
-    // 4) Unwrap Wrapped Native Token -> Native Token (withdraw)
-    const wrappedContract = new ethers.Contract(
-      network.wrappedNativeAddress,
-      erc20Abi,
-      wallet
+    console.log(`🍰 ⓘ | Параметры:`, { ...params, gasPrice });
+    logAndNotify(
+      `🍰 ⌛️ | Свап ${tokenIn} -> ${network.wrappedName} на сумму ${tokenAmountStr}...`
     );
-    const wrappedBalance = await wrappedContract.balanceOf(wallet.address);
-    if (wrappedBalance > 0n) {
-      console.log(`Unwrapping ${network.wrappedName} -> ${network.name} for ${wrappedBalance} wei...`);
-      const withdrawTransaction = await wrappedContract.withdraw(wrappedBalance, {
-        gasPrice,
-      });
-      await withdrawTransaction.wait();
-      console.log(`${network.name} received!`);
-    }
 
-    return receipt;
-  };
+    const swapTx = await routerContract.exactInputSingle(params, { gasPrice });
+    logAndNotify(`🍰 ⌛️ | Транзакция свапа отправлена: ${swapTx.hash}`);
+
+    const swapReceipt = await swapTx.wait();
+    logAndNotify(
+      `🍰 ✅ | Свап ${tokenIn} -> ${network.wrappedName} выполнен (блок: ${swapReceipt.blockNumber}).`
+    );
+
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+    const wrappedBalance = await wrappedContract.balanceOf(signer.address);
+    await unwrapNativeToken(wrappedBalance, gasPrice);
+
+    return swapReceipt;
+  }
 
   return {
-    getPair,
-    getReserves,
+    getPairPools,
+    findPools,
     getTokenBalance,
-    swapNativeForTokens,
-    swapTokensForNative,
+    buyToken,
+    sellToken,
   };
-};
+}

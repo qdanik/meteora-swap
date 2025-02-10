@@ -12,30 +12,43 @@ export const handleBNBPancake3 = async ({
   mqConnection: RabbitMQConnection;
   address: string;
 }) => {
+  function logAndNotify(message: string) {
+    if (mqConnection) {
+      mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: message });
+    }
+    console.log(message);
+  }
+
   try {
-    mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Начинаю свап <code>${address}</code> через PanCakeV3` });
-    const pancakeV3 = createPanCakeV3(NETWORKS.BNB, mqConnection);
+    logAndNotify(`🍰 ⌛️ | Начинаю свап <code>${address}</code> через PanCakeV3`);
 
-    const pool = await pancakeV3.getPair(BNB, address);
-    console.log(`🍰 | Ищем пул для ${address}`, pool);
-    const reserves = await pancakeV3.getReserves(pool);
-    console.log("🍰 | Reserves", reserves);
+    let retryCount = 0;
+    const pancakeV3 = createPanCakeV3(NETWORKS.BNB, logAndNotify);
+    const pairPools = await pancakeV3.getPairPools(BNB, address);
+    const pool = await pancakeV3.findPools(pairPools);
 
-    if (reserves === 'Pools not found') {
-      mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ❌ | Пул для <code>${address}</code> не найден` });
-      console.log(`🍰 | ❌ Pools not found`);
+    if (pool === 'Pools not found') {
+      logAndNotify(`🍰 ❌ | Пул для <code>${address}</code> не найден`);
       return;
     }
-    mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${reserves.address}</code>` });
-    await pancakeV3.swapNativeForTokens(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, reserves).catch(async (error) => {
-      if (error?.shortMessage === 'transaction execution reverted') {
-        return await pancakeV3.swapTokensForNative(address, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, reserves);
-      }
 
-      return Promise.reject(error);
-    });
+    const swapToken = async (token: string) => {
+      try {
+        return await pancakeV3.buyToken(token, DEFAULT_BNB_AMOUNT, DEFAULT_BNB_GWEI, pool);
+      } catch (error) {
+        if (retryCount < MAX_RETRY) {
+          retryCount++;
+          logAndNotify(`🍰 ⌛️ | (${retryCount}) Попробуем ещё раз...`);
+          return Promise.resolve(swapToken(token));
+        }
+        return Promise.reject(error);
+      }
+    };
+
+    logAndNotify(`🍰 ⌛️ | Найден пул для <code>${address}</code> -> <code>${pool.address}</code>`);
+    await swapToken(address);
   } catch (error) {
-    mqConnection.sendToQueue(RMQ_NOTIFY_QUEUE, { text: `🍰 ❌ | Ошибка при свапе: ${error.message}` });
+    logAndNotify(`🍰 ❌ | Ошибка при свапе: ${error.message}`);
     console.error(`🍰 | ❌ Error in swap: ${error.message}`);
   }
 };
