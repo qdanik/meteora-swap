@@ -2,16 +2,37 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const SOL_PRIVATE_KEY = process.env.SOL_PRIVATE_KEY;
+export const SOLANA_PRIVATE_KEY = process.env.SOLANA_PRIVATE_KEY;
 export const SOL_RPC_URL = process.env.SOL_RPC_URL;
 
+export const BSC_PRIVATE_KEY = process.env.BSC_PRIVATE_KEY;
+export const BSC_RPC_URL = process.env.BSC_RPC_URL;
+
+export const ETH_PRIVATE_KEY = process.env.ETH_PRIVATE_KEY;
+export const ETH_RPC_URL = process.env.ETH_RPC_URL;
+
+export const BASE_PRIVATE_KEY = process.env.BASE_PRIVATE_KEY;
+export const BASE_RPC_URL = process.env.BASE_RPC_URL;
+
 export const DEFAULT_USDC_AMOUNT = Number(process.env.DEFAULT_USDC_AMOUNT);
+export const DEFAULT_BNB_AMOUNT = process.env.DEFAULT_BNB_AMOUNT ?? '0.01';
+export const DEFAULT_BNB_GWEI = process.env.DEFAULT_BNB_GWEI ?? '1';
 export const DEFAULT_SOL_AMOUNT = Number(process.env.DEFAULT_SOL_AMOUNT);
 export const DEFAULT_SLIPPAGE = Number(process.env.DEFAULT_SLIPPAGE);
+export const DEFAULT_PRIORITY_FEE = Number(process.env.DEFAULT_PRIORITY_FEE);
+export const MAX_RETRY = Number(process.env.MAX_RETRY);
 
 export const RMQ_HOST = process.env.RMQ_HOST;
-export const RMQ_PORT = process.env.RMQ_PORT;
+export const RMQ_PORT = Number(process.env.RMQ_PORT);
 export const RMQ_USER = process.env.RMQ_USER;
 export const RMQ_PASS = process.env.RMQ_PASS;
 export const RMQ_TX_QUEUE = process.env.RMQ_TX_QUEUE;
-export const RMQ_NOTIFY_QUEUE = process.env.RMQ_NOTIFY_QUEUE;
+export const RMQ_SWAP_TOKEN = process.env.RMQ_SWAP_TOKEN ?? '';
+export const RMQ_NOTIFY_QUEUE = process.env.RMQ_NOTIFY_QUEUE ?? '';
+
+export const API_URL = process.env.API_URL;
+
+export const DEFAULT_CA = {
+  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  SOL: 'So11111111111111111111111111111111111111112',
+};

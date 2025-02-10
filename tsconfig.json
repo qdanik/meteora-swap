@@ -5,6 +5,7 @@
     "outDir": "dist",
     "esModuleInterop": true,
     "checkJs": false,
+    "skipLibCheck": true,
     "allowJs": true,
   },
   "include": [
