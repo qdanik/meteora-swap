@@ -40,34 +40,9 @@ export function createPanCakeV3(
     const currentAllowance = await tokenContract.allowance(signer.address, spender);
 
     if (currentAllowance < requiredAmount) {
-      logAndNotify(`🍰 ⌛️ | Аппрув ${tokenAddress} для спендера: ${spender}...`);
       const approveTx = await tokenContract.approve(spender, requiredAmount, { gasPrice });
       await approveTx.wait();
       logAndNotify(`🍰 ✅ | Аппрув ${tokenAddress} успешно выполнен!`);
-    }
-  }
-
-  async function wrapNativeToken(amountWei: bigint, gasPrice: bigint) {
-    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
-
-    logAndNotify(
-      `🍰 ⌛️ | Оборачиваем ${amountWei} wei (${network.name}) в ${network.wrappedName}...`
-    );
-    const wrapTx = await wrappedContract.deposit({ value: amountWei, gasPrice });
-    await wrapTx.wait();
-    logAndNotify(`🍰 ✅ | Получено ${network.wrappedName}!`);
-  }
-
-  async function unwrapNativeToken(amountWei: bigint, gasPrice: bigint) {
-    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
-
-    if (amountWei > 0n) {
-      logAndNotify(
-        `🍰 ⌛️ | Распаковываем ${amountWei} wei (${network.wrappedName}) в ${network.name}...`
-      );
-      const withdrawTx = await wrappedContract.withdraw(amountWei, { gasPrice });
-      await withdrawTx.wait();
-      logAndNotify(`🍰 ✅ | Получено ${network.name}!`);
     }
   }
 
@@ -107,6 +82,53 @@ export function createPanCakeV3(
       sqrtPriceX96: slot0Data[0].toString(),
       liquidity: liquidityBn.toString(),
     };
+  }
+
+  async function getTokenSymbol(tokenAddress: string) {
+    const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, provider);
+    return await tokenContract.symbol();
+  }
+
+  async function getNativeInUSDT(amount: string) {
+    const pairPools = await getPairPools(network.usdtAddress, network.wrappedNativeAddress);
+    const mostLiquidPool = await findPools(pairPools);
+
+    if (mostLiquidPool === 'Pools not found') {
+      throw new Error(`🍰 ❌ | Пулы для ${network.wrappedName} -> USDT не найдены`);
+    }
+
+    const usdtToNative = (Number(mostLiquidPool.sqrtPriceX96) / 2 ** 96) ** 2;
+    const nativeToUSDT = 1 / usdtToNative;
+
+    console.log(`🍰 ⓘ | Курс ${network.wrappedName} -> USDT: ${usdtToNative}`);
+    console.log(`🍰 ⓘ | Курс USDT -> ${network.wrappedName}: ${nativeToUSDT}`);
+
+    return (nativeToUSDT * Number(amount)).toFixed(3);
+  }
+
+  async function wrapNativeToken(amountWei: bigint, gasPrice: bigint) {
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+    const amountNative = await formatToken(network.usdtAddress, amountWei);
+    const amountUsdt = await getNativeInUSDT(amountNative);
+
+    const wrapTx = await wrappedContract.deposit({ value: amountWei, gasPrice });
+    await wrapTx.wait();
+    logAndNotify(`🍰 ✅ | Свапнули ${amountNative} ${network.name} (${amountUsdt} USDT) в ${network.wrappedName}!`);
+  }
+
+  async function unwrapNativeToken(amountWei: bigint, gasPrice: bigint) {
+    const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
+    const amountNative = await formatToken(network.wrappedNativeAddress, amountWei);
+    const amountUsdt = await getNativeInUSDT(amountNative);
+
+    if (amountWei > 0n) {
+      logAndNotify(
+        `🍰 ⌛️ | Распаковываем ${amountNative} ${network.wrappedName} (${amountUsdt} USDT) в ${network.name}...`
+      );
+      const withdrawTx = await wrappedContract.withdraw(amountWei, { gasPrice });
+      await withdrawTx.wait();
+      logAndNotify(`🍰 ✅ | Получено ${network.name}!`);
+    }
   }
 
   async function findPools(pools: Array<{ fee: number; pool: string; }>) {
@@ -154,7 +176,7 @@ export function createPanCakeV3(
 
     if (walletNativeBalance < totalNeeded) {
       throw new Error(
-        `🍰 ❌ | Недостаточно ${network.name}: есть - ${walletNativeBalance}, нужно - ${totalNeeded}`
+        `🍰 ❌ | Недостаточно ${network.name}: есть - ${walletNativeBalance} ${network.name}, нужно - ${totalNeeded} ${network.name}`
       );
     }
 
@@ -166,6 +188,7 @@ export function createPanCakeV3(
 
     const routerContract = new ethers.Contract(network.routerAddress, ROUTER_ABI, signer);
     const deadline = getDeadline(5);
+    const tokenOutSymbol = await getTokenSymbol(tokenOut);
     const params = {
       tokenIn: network.wrappedNativeAddress,
       tokenOut,
@@ -179,14 +202,14 @@ export function createPanCakeV3(
     console.log(`🍰 ⓘ | Параметры:`, params);
 
     logAndNotify(
-      `🍰 ⌛️ | Свап ${network.wrappedName} -> ${tokenOut} на сумму ${nativeAmountStr} ${network.wrappedName}...`
+      `🍰 ⌛️ | Свап ${network.wrappedName} -> ${tokenOutSymbol} на сумму ${nativeAmountStr} ${network.wrappedName}...`
     );
 
     const swapTx = await routerContract.exactInputSingle(params, { gasPrice });
     logAndNotify(`🍰 ⌛️ | Транзакция свапа отправлена: ${swapTx.hash}`);
     const swapReceipt = await swapTx.wait();
     logAndNotify(
-      `🍰 ✅ | Свап ${network.wrappedName} -> ${tokenOut} выполнен (блок: ${swapReceipt.blockNumber}). Тх: ${swapTx.hash}`
+      `🍰 ✅ | Свап ${network.wrappedName} -> ${tokenOutSymbol} выполнен (блок: ${swapReceipt.blockNumber}).`
     );
 
     return swapReceipt;
@@ -209,9 +232,10 @@ export function createPanCakeV3(
     const tokenContract = new ethers.Contract(tokenIn, ERC20_ABI, signer);
     const amountIn = await parseToken(tokenIn, tokenAmountStr);
     const currentBalance = await tokenContract.balanceOf(signer.address);
+    const tokenInSymbol = await getTokenSymbol(tokenIn);
     if (currentBalance < amountIn) {
       throw new Error(
-        `🍰 ❌ | Недостаточно токена ${tokenIn}: есть - ${currentBalance}, нужно - ${amountIn}`
+        `🍰 ❌ | Недостаточно токена ${tokenInSymbol}: есть - ${currentBalance} ${tokenInSymbol}, нужно - ${amountIn} ${tokenInSymbol}`
       );
     }
 
@@ -228,11 +252,11 @@ export function createPanCakeV3(
       deadline,
       amountIn,
       amountOutMinimum,
-      sqrtPriceLimitX96: poolData.sqrtPriceX96,
+      sqrtPriceLimitX96: 0,
     };
     console.log(`🍰 ⓘ | Параметры:`, { ...params, gasPrice });
     logAndNotify(
-      `🍰 ⌛️ | Свап ${tokenIn} -> ${network.wrappedName} на сумму ${tokenAmountStr}...`
+      `🍰 ⌛️ | Свап ${tokenInSymbol} -> ${network.wrappedName} на сумму ${tokenAmountStr} ${tokenInSymbol}...`
     );
 
     const swapTx = await routerContract.exactInputSingle(params, { gasPrice });
@@ -240,7 +264,7 @@ export function createPanCakeV3(
 
     const swapReceipt = await swapTx.wait();
     logAndNotify(
-      `🍰 ✅ | Свап ${tokenIn} -> ${network.wrappedName} выполнен (блок: ${swapReceipt.blockNumber}).`
+      `🍰 ✅ | Свап ${tokenInSymbol} -> ${network.wrappedName} выполнен (блок: ${swapReceipt.blockNumber}).`
     );
 
     const wrappedContract = new ethers.Contract(network.wrappedNativeAddress, ERC20_ABI, signer);
@@ -251,6 +275,7 @@ export function createPanCakeV3(
   }
 
   return {
+    getNativeInUSDT,
     getPairPools,
     findPools,
     getTokenBalance,

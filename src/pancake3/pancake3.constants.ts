@@ -11,6 +11,7 @@ export interface NetworkConfig {
   factoryAddress: string;
   routerAddress: string;
   wrappedNativeAddress: string;
+  usdtAddress: string;
 }
 
 export const NETWORKS = {
@@ -23,6 +24,7 @@ export const NETWORKS = {
     factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
     routerAddress: "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
     wrappedNativeAddress: "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c",
+    usdtAddress: "0x55d398326f99059fF775485246999027B3197955",
   },
   BASE: {
     chainId: 8453,
@@ -33,5 +35,6 @@ export const NETWORKS = {
     factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865",
     routerAddress: "0x1b81D678ffb9C0263b24A97847620C99d213eB14",
     wrappedNativeAddress: "0x4200000000000000000000000000000000000006",
+    usdtAddress: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
   },
 };

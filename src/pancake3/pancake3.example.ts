@@ -1,3 +1,4 @@
+import { formatUnits } from 'ethers';
 import { MAX_RETRY } from '../config';
 import { createPanCakeV3 } from './pancake3';
 import { NETWORKS } from './pancake3.constants';
@@ -27,7 +28,7 @@ async function mainV3BnB() {
 
   const swapToken = async (token: string) => {
     try {
-      return await pancakeV3.buyToken(token, '0.005', '1', pool);
+      return await pancakeV3.buyToken(token, '0.001', '1', pool);
     } catch (error) {
       if (retryCount < MAX_RETRY) {
         retryCount++;
@@ -39,9 +40,9 @@ async function mainV3BnB() {
     }
   };
 
-  // const swap = await swapToken('0x86Bb94DdD16Efc8bc58e6b056e8df71D9e666429');
+  // const swap = await swapToken(TST);
   // console.log("Swap", swap);
-  // const swap2 = await pancakeV3.sellToken(TST, "2.56", "1", pool);
+  // const swap2 = await pancakeV3.sellToken(TST, "10", "1", pool);
   // console.log("Swap2", swap2);
 }
 
